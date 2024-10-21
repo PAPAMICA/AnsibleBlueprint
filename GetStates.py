@@ -29,21 +29,21 @@ def run_command(command):
 
 def get_installed_packages():
     """
-    Retrieve information about installed packages.
+    Retrieve information about packages installed by the user.
     
     Returns:
-        list: A list of dictionaries containing package information.
+        list: A list of dictionaries containing user-installed package information.
     """
-    logging.info("Retrieving installed packages information")
+    logging.info("Retrieving user-installed packages information")
     packages = []
     try:
-        output = run_command("dpkg-query -W -f='${Package}\t${Version}\n'")
-        for line in output.split('\n'):
-            if line:
-                package, version = line.split('\t')
+        output = run_command("apt-mark showmanual")
+        for package in output.split('\n'):
+            if package:
+                version = run_command(f"dpkg-query -W -f='${{Version}}' {package}")
                 packages.append({"name": package, "version": version})
     except Exception as e:
-        logging.error(f"Error retrieving package information: {e}")
+        logging.error(f"Error retrieving user-installed package information: {e}")
     return packages
 
 def get_python_packages():

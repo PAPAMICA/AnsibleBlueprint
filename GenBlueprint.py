@@ -87,8 +87,13 @@ def generate_network_playbook(data):
     with open("playbooks/network.yml", "w") as playbook_file:
         playbook_file.write(playbook_content)
 
-def generate_main_playbook():
-    """Generate the main playbook to include all others."""
+def generate_main_playbook(hostname):
+    """
+    Generate the main playbook to include all others.
+    
+    Args:
+        hostname (str): The hostname of the server.
+    """
     main_playbook_content = """
 ---
 - import_playbook: packages.yml
@@ -96,19 +101,20 @@ def generate_main_playbook():
 - import_playbook: network.yml
 - import_playbook: ssh.yml
     """
-    with open("playbooks/site.yml", "w") as playbook_file:
+    with open(f"playbooks/{hostname}.yml", "w") as playbook_file:
         playbook_file.write(main_playbook_content)
 
-def update_inventory(hostname, public_ip):
+def update_inventory(hostname, public_ip, ssh_port):
     """
     Update the Ansible inventory file.
     
     Args:
         hostname (str): The hostname of the server.
         public_ip (str): The public IP address of the server.
+        ssh_port (int): The SSH port number.
     """
     inventory_file = "playbooks/inventory"
-    inventory_entry = f"{hostname} ansible_host={public_ip} ansible_user=root ansible_ssh_private_key_file=/path/to/your/private/key"
+    inventory_entry = f"{hostname} ansible_host={public_ip} ansible_user=root ansible_port={ssh_port}"
 
     if os.path.exists(inventory_file):
         with open(inventory_file, 'r') as f:
@@ -164,16 +170,17 @@ def main():
     generate_network_playbook(data)
     generate_ssh_playbook(data)
     
-    generate_main_playbook()
-
     hostname = data.get('hostname', 'unknown')
-    public_ip = data.get('public_ip', 'unknown')
-    update_inventory(hostname, public_ip)
+    generate_main_playbook(hostname)
 
-    print("Playbooks have been generated in the 'playbooks' directory.")
+    public_ip = data.get('public_ip', 'unknown')
+    ssh_port = data.get('ssh_port', 22)
+    update_inventory(hostname, public_ip, ssh_port)
+
+    print(f"Playbooks have been generated in the 'playbooks' directory.")
     print("Inventory file has been updated.")
     print("\nTo test these playbooks, run the following Ansible command:")
-    print(f"ansible-playbook -i playbooks/inventory playbooks/site.yml")
+    print(f"ansible-playbook -i playbooks/inventory playbooks/{hostname}.yml --check")
 
 if __name__ == "__main__":
     main()
