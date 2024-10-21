@@ -67,6 +67,79 @@ def get_python_packages():
         logging.error(f"Error retrieving Python package information: {e}")
     return python_packages
 
+def get_modified_config_files():
+    """
+    Retrieve the content of modified configuration files.
+    
+    Returns:
+        dict: A dictionary where keys are file paths and values are the file contents.
+    """
+    logging.info("Retrieving modified configuration files")
+    modified_files = {}
+
+    def get_installed_config_files():
+        command = "dpkg-query -W -f='${Conffiles}\n' '*'"
+        result = run_command(command)
+        config_files = {}
+        for line in result.splitlines():
+            if line.strip():
+                parts = line.split()
+                if len(parts) == 2:
+                    file_path, checksum = parts
+                    config_files[file_path] = checksum
+        return config_files
+
+    def calculate_md5(file_path):
+        command = f"md5sum {file_path}"
+        result = run_command(command)
+        if result:
+            return result.split()[0]
+        return None
+
+    def compare_checksums():
+        config_files = get_installed_config_files()
+        modified = []
+        for file_path, original_checksum in config_files.items():
+            current_checksum = calculate_md5(file_path)
+            if current_checksum and current_checksum != original_checksum:
+                modified.append(file_path)
+        return modified
+
+    try:
+        modified_file_paths = compare_checksums()
+        for file_path in modified_file_paths:
+            try:
+                with open(file_path, 'r') as f:
+                    content = f.read()
+                # Remove comments and empty lines
+                cleaned_content = '\n'.join(line for line in content.splitlines() if line.strip() and not line.strip().startswith('#'))
+                modified_files[file_path] = cleaned_content
+            except Exception as e:
+                logging.error(f"Error reading file {file_path}: {e}")
+    except Exception as e:
+        logging.error(f"Error retrieving modified configuration files: {e}")
+
+    return modified_files
+
+def get_apt_sources():
+    """
+    Retrieve APT sources information.
+    
+    Returns:
+        dict: A dictionary containing APT sources information.
+    """
+    logging.info("Retrieving APT sources information")
+    apt_sources = {}
+    try:
+        apt_sources['sources_list'] = run_command("cat /etc/apt/sources.list")
+        apt_sources['sources_list_d'] = run_command("ls -1 /etc/apt/sources.list.d/")
+        for file in apt_sources['sources_list_d'].split('\n'):
+            if file:
+                apt_sources[file] = run_command(f"cat /etc/apt/sources.list.d/{file}")
+    except Exception as e:
+        logging.error(f"Error retrieving APT sources information: {e}")
+    return apt_sources
+
 def get_all_packages():
     """
     Retrieve information about all installed packages, including system and Python packages.
@@ -278,7 +351,9 @@ def collect_server_info():
         "shell_config": get_shell_config(),
         "docker_info": get_docker_info(),
         "public_ip": public_ip_and_ssh['public_ip'],
-        "ssh_config": public_ip_and_ssh['ssh_config']
+        "ssh_config": public_ip_and_ssh['ssh_config'],
+        "modified_config_files": get_modified_config_files(),
+        "apt_sources": get_apt_sources()
     }
     return server_info, hostname
 

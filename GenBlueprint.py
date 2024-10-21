@@ -35,10 +35,11 @@ def generate_packages_playbook(data):
   tasks:
     - name: Install required packages
       apt:
-        name:
-          - {'\n          - '.join(packages)}
+        name: "{{{{ item }}}}"
         state: present
         update_cache: yes
+      loop:
+        - {'\n        - '.join(packages)}
     """
     with open("playbooks/packages.yml", "w") as playbook_file:
         playbook_file.write(playbook_content)
@@ -50,7 +51,7 @@ def generate_services_playbook(data):
     Args:
         data (dict): Server configuration data.
     """
-    services = ["cron"]  # Add other services if needed
+    services = [service['name'] for service in data.get('services', [])]
     playbook_content = f"""
 ---
 - hosts: all
@@ -100,6 +101,7 @@ def generate_main_playbook(hostname):
 - import_playbook: services.yml
 - import_playbook: network.yml
 - import_playbook: ssh.yml
+- import_playbook: crontab.yml
     """
     with open(f"playbooks/{hostname}.yml", "w") as playbook_file:
         playbook_file.write(main_playbook_content)
@@ -134,26 +136,67 @@ def generate_ssh_playbook(data):
         data (dict): Server configuration data.
     """
     ssh_config = data.get('ssh_config', '')
-    playbook_content = f"""
----
+    indented_ssh_config = '\n'.join('          ' + line for line in ssh_config.split('\n') if line.strip() and not line.strip().startswith('#'))
+    playbook_content = f"""---
 - hosts: all
   become: yes
   tasks:
     - name: Configure SSH
       copy:
         content: |
-{ssh_config}
+{indented_ssh_config}
         dest: /etc/ssh/sshd_config
         owner: root
         group: root
         mode: '0644'
-    
     - name: Restart SSH service
       service:
         name: sshd
         state: restarted
-    """
+"""
     with open("playbooks/ssh.yml", "w") as playbook_file:
+        playbook_file.write(playbook_content)
+
+def generate_crontab_playbook(data):
+    """
+    Generate a playbook to configure crontab.
+    
+    Args:
+        data (dict): Server configuration data.
+    """
+    crontab = data.get('crontab', {})
+    root_crontab = crontab.get('root', '')
+    
+    # Split the crontab entries into separate lines
+    crontab_lines = root_crontab.strip().split('\n')
+    
+    # Create individual cron tasks for each entry
+    cron_tasks = []
+    for i, line in enumerate(crontab_lines):
+        parts = line.split(None, 5)
+        if len(parts) == 6:
+            minute, hour, day, month, weekday, command = parts
+            cron_tasks.append(f"""
+    - name: Configure root crontab entry {i+1}
+      cron:
+        name: "Root crontab entry {i+1}"
+        user: root
+        minute: "{minute}"
+        hour: "{hour}"
+        day: "{day}"
+        month: "{month}"
+        weekday: "{weekday}"
+        job: "{command}"
+""")
+    
+    # Join all cron tasks into a single string
+    cron_tasks_str = ''.join(cron_tasks)
+    
+    playbook_content = f"""---
+- hosts: all
+  become: yes
+  tasks:{cron_tasks_str}"""
+    with open("playbooks/crontab.yml", "w") as playbook_file:
         playbook_file.write(playbook_content)
 
 def main():
@@ -169,12 +212,13 @@ def main():
     generate_services_playbook(data)
     generate_network_playbook(data)
     generate_ssh_playbook(data)
+    generate_crontab_playbook(data)
     
     hostname = data.get('hostname', 'unknown')
     generate_main_playbook(hostname)
 
     public_ip = data.get('public_ip', 'unknown')
-    ssh_port = data.get('ssh_port', 22)
+    ssh_port = int(data.get('ssh_config', '').split('Port')[1].split()[0]) if 'Port' in data.get('ssh_config', '') else 22
     update_inventory(hostname, public_ip, ssh_port)
 
     print(f"Playbooks have been generated in the 'playbooks' directory.")
