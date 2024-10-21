@@ -237,6 +237,22 @@ def get_docker_info():
         logging.error(f"Error retrieving Docker information: {e}")
     return docker_info
 
+def get_public_ip_and_ssh_config():
+    """
+    Retrieve the public IP address and SSH configuration.
+    
+    Returns:
+        dict: A dictionary containing public IP and SSH configuration.
+    """
+    logging.info("Retrieving public IP and SSH configuration")
+    info = {}
+    try:
+        info['public_ip'] = run_command("curl -s https://api.ipify.org")
+        info['ssh_config'] = run_command("cat /etc/ssh/sshd_config")
+    except Exception as e:
+        logging.error(f"Error retrieving public IP and SSH configuration: {e}")
+    return info
+
 def collect_server_info():
     """
     Collect all server information and return it as a dictionary.
@@ -245,6 +261,7 @@ def collect_server_info():
         dict: A dictionary containing all collected server information.
     """
     hostname = run_command("hostname")
+    public_ip_and_ssh = get_public_ip_and_ssh_config()
     server_info = {
         "timestamp": datetime.now().isoformat(),
         "hostname": hostname,
@@ -259,7 +276,9 @@ def collect_server_info():
         "dns_info": get_dns_info(),
         "file_system_info": get_file_system_info(),
         "shell_config": get_shell_config(),
-        "docker_info": get_docker_info()
+        "docker_info": get_docker_info(),
+        "public_ip": public_ip_and_ssh['public_ip'],
+        "ssh_config": public_ip_and_ssh['ssh_config']
     }
     return server_info, hostname
 
