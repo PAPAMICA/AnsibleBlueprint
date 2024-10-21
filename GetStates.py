@@ -45,6 +45,7 @@ def get_installed_packages():
     except Exception as e:
         logging.error(f"Error retrieving package information: {e}")
     return packages
+
 def get_python_packages():
     """
     Retrieve information about installed Python packages.
@@ -111,6 +112,8 @@ def get_network_config():
         network_config['interfaces'] = run_command("ip -j addr show")
         network_config['routing_table'] = run_command("ip -j route show")
         network_config['dns_servers'] = run_command("cat /etc/resolv.conf | grep nameserver")
+        network_config['dns_search'] = run_command("cat /etc/resolv.conf | grep search")
+        network_config['dns_domain'] = run_command("cat /etc/resolv.conf | grep domain")
     except Exception as e:
         logging.error(f"Error retrieving network configuration: {e}")
     return network_config
@@ -164,6 +167,76 @@ def get_firewall_rules():
         logging.error(f"Error retrieving firewall rules: {e}")
         return ""
 
+def get_dns_info():
+    """
+    Retrieve DNS information.
+    
+    Returns:
+        dict: A dictionary containing DNS information.
+    """
+    logging.info("Retrieving DNS information")
+    dns_info = {}
+    try:
+        dns_info['hosts'] = run_command("cat /etc/hosts")
+        dns_info['resolv_conf'] = run_command("cat /etc/resolv.conf")
+    except Exception as e:
+        logging.error(f"Error retrieving DNS information: {e}")
+    return dns_info
+
+def get_file_system_info():
+    """
+    Retrieve file system information.
+    
+    Returns:
+        dict: A dictionary containing file system information.
+    """
+    logging.info("Retrieving file system information")
+    fs_info = {}
+    try:
+        fs_info['disk_usage'] = run_command("df -h")
+        fs_info['directory_tree'] = run_command("tree -L 2 /")
+    except Exception as e:
+        logging.error(f"Error retrieving file system information: {e}")
+    return fs_info
+
+def get_shell_config():
+    """
+    Retrieve shell configuration information.
+    
+    Returns:
+        dict: A dictionary containing shell configuration information.
+    """
+    logging.info("Retrieving shell configuration")
+    shell_config = {}
+    try:
+        shell_config['bash_rc'] = run_command("cat ~/.bashrc")
+        shell_config['bash_profile'] = run_command("cat ~/.bash_profile")
+        shell_config['zshrc'] = run_command("cat ~/.zshrc")
+    except Exception as e:
+        logging.error(f"Error retrieving shell configuration: {e}")
+    return shell_config
+
+def get_docker_info():
+    """
+    Retrieve Docker information if Docker is installed.
+    
+    Returns:
+        dict: A dictionary containing Docker information.
+    """
+    logging.info("Retrieving Docker information")
+    docker_info = {}
+    try:
+        if run_command("which docker"):
+            docker_info['version'] = run_command("docker version --format '{{json .}}'")
+            docker_info['info'] = run_command("docker info --format '{{json .}}'")
+            docker_info['containers'] = run_command("docker ps -a --format '{{json .}}'")
+            docker_info['images'] = run_command("docker images --format '{{json .}}'")
+        else:
+            docker_info['status'] = "Docker not installed"
+    except Exception as e:
+        logging.error(f"Error retrieving Docker information: {e}")
+    return docker_info
+
 def collect_server_info():
     """
     Collect all server information and return it as a dictionary.
@@ -171,9 +244,10 @@ def collect_server_info():
     Returns:
         dict: A dictionary containing all collected server information.
     """
+    hostname = run_command("hostname")
     server_info = {
         "timestamp": datetime.now().isoformat(),
-        "hostname": run_command("hostname"),
+        "hostname": hostname,
         "os_version": run_command("cat /etc/os-release"),
         "kernel_version": run_command("uname -r"),
         "installed_packages": get_installed_packages(),
@@ -181,9 +255,13 @@ def collect_server_info():
         "network_config": get_network_config(),
         "users_and_groups": get_users_and_groups(),
         "crontab": get_crontab(),
-        "firewall_rules": get_firewall_rules()
+        "firewall_rules": get_firewall_rules(),
+        "dns_info": get_dns_info(),
+        "file_system_info": get_file_system_info(),
+        "shell_config": get_shell_config(),
+        "docker_info": get_docker_info()
     }
-    return server_info
+    return server_info, hostname
 
 def main():
     """
@@ -191,9 +269,9 @@ def main():
     """
     logging.info("Starting server information collection")
     
-    server_info = collect_server_info()
+    server_info, hostname = collect_server_info()
     
-    output_file = f"server_info_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    output_file = f"{hostname}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     try:
         with open(output_file, 'w') as f:
             json.dump(server_info, f, indent=2)
